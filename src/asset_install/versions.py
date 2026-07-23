@@ -4,16 +4,16 @@ import requests
 import datetime
 from pathlib import Path
 from typing import List, Dict
+import importlib.resources
 
 from .paths import get_app_data_dir
 
 # Match 1.x.y or 26.x.y
 VERSION_REGEX = re.compile(r"^(1|[2-9]\d+)\.\d+(?:\.\d+)?$")
 
-def get_versions_file_path() -> Path:
-    """Returns the path to the config/versions.txt file (bundled fallback)."""
-    project_root = Path(__file__).parent.parent.parent
-    return project_root / "config" / "versions.txt"
+def get_fallback_versions_path() -> Path:
+    """Returns the path to the bundled versions.txt file."""
+    return importlib.resources.files("asset_install").joinpath("versions.txt")
 
 def get_cached_versions_path() -> Path:
     """Returns the path to the local versions cache."""
@@ -44,7 +44,7 @@ def group_versions(versions: List[str]) -> Dict[str, List[str]]:
 
 def load_bundled_versions() -> List[str]:
     """Loads the bundled list of approved versions from config/versions.txt."""
-    versions_path = get_versions_file_path()
+    versions_path = get_fallback_versions_path()
     if not versions_path.exists():
         return []
     
