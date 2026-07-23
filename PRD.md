@@ -634,3 +634,181 @@ Open Asset Install
 Do not install system packages or use `sudo`.
 
 Do not push to GitHub or create commits unless explicitly requested.
+
+---
+
+# 17. Distribution
+
+Asset Install should be developed as a cross-platform command-line application that works consistently on Linux, Windows, and macOS.
+
+The goal is to make installation as simple as possible regardless of the user's operating system.
+
+---
+
+## Supported Platforms
+
+- ✅ Linux
+- ✅ Windows
+- ✅ macOS
+
+All major features should behave consistently across every supported platform.
+
+---
+
+## Official Distribution Channels
+
+### GitHub Releases (Primary)
+
+Every release should be published on GitHub Releases and include:
+
+- Linux executable
+- Windows executable (.exe)
+- macOS executable
+- Release notes
+- Changelog
+- SHA-256 checksums
+
+---
+
+### PyPI
+
+Asset Install should be available as a Python package.
+
+```bash
+pip install asset-install
+```
+
+Launch:
+
+```bash
+asset-install
+```
+
+---
+
+### Homebrew (macOS)
+
+```bash
+brew install asset-install
+```
+
+---
+
+### WinGet (Windows)
+
+```powershell
+winget install AssetInstall
+```
+
+---
+
+### Scoop (Windows)
+
+```powershell
+scoop install asset-install
+```
+
+---
+
+### Arch Linux (AUR)
+
+```bash
+yay -S asset-install
+```
+
+or
+
+```bash
+paru -S asset-install
+```
+
+---
+
+### Fedora COPR (Optional)
+
+```bash
+dnf copr enable <repository>
+dnf install asset-install
+```
+
+---
+
+### Debian / Ubuntu
+
+Provide an official `.deb` package.
+
+```bash
+sudo apt install ./asset-install.deb
+```
+
+---
+
+### RPM-based Distributions
+
+Provide an official `.rpm` package.
+
+Fedora:
+
+```bash
+sudo dnf install asset-install.rpm
+```
+
+openSUSE:
+
+```bash
+sudo zypper install asset-install.rpm
+```
+
+---
+
+## Standalone Executables
+
+Official releases should include self-contained executables for every platform.
+
+```text
+AssetInstall-Linux
+AssetInstall-Windows.exe
+AssetInstall-macOS
+```
+
+Users should not be required to install Python to use these builds.
+
+---
+
+## Release Requirements
+
+Every official release should include:
+
+- Semantic version number
+- Release notes
+- Changelog
+- SHA-256 checksums
+- Supported operating systems
+- Minimum supported Python version (for PyPI releases)
+
+---
+
+## Future Distribution Goals
+
+Future versions may support:
+
+- Automatic update notifications
+- Downloading assets from additional trusted repositories
+- Optional archive extraction
+- Version comparison tools
+- Resume interrupted download sessions
+- Custom terminal themes
+- Plugin support for additional asset providers
+
+---
+
+## Recommended Technology Stack
+
+To provide a polished terminal experience across all supported platforms, the project should use:
+
+- **Typer** for the command-line interface
+- **Rich** for colors, tables, and progress bars
+- **InquirerPy** for interactive menus and multi-select prompts
+- **PyInstaller** for generating standalone executables
+
+This stack provides a modern terminal interface while remaining fully cross-platform and easy to distribute.

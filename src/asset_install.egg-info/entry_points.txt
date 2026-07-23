@@ -1,0 +1,2 @@
+[console_scripts]
+asset-install = asset_install.app:main

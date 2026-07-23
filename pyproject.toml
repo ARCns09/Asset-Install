@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asset-install"
+version = "0.1.0"
+description = "Interactive terminal Minecraft Asset Downloader"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Asset Install Contributors" }
+]
+dependencies = [
+    "rich>=13.0.0",
+    "InquirerPy>=0.3.4",
+    "requests>=2.31.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "responses>=0.23.0"
+]
+
+[project.scripts]
+asset-install = "asset_install.app:main"
