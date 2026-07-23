@@ -24,7 +24,7 @@ def print_header():
         width=40
     ))
 
-def print_summary(mode: str, versions: list[str], location: str, output_mode: str, categories: set = None):
+def print_summary(mode: str, versions: list[str], location: str, output_mode: str, categories: set = None, texture_subs: set = None):
     console.print("\n[bold]Ready to Download[/bold]")
     console.print(f"Mode: {mode}")
     if len(versions) <= 5:
@@ -34,6 +34,8 @@ def print_summary(mode: str, versions: list[str], location: str, output_mode: st
     console.print(f"Output: {output_mode}")
     if categories is not None:
         console.print(f"Categories: {', '.join(sorted(categories))}")
+    if texture_subs is not None and "Textures" in categories:
+        console.print(f"Texture Subs: {', '.join(sorted(texture_subs))}")
     console.print(f"Location: {location}")
     if output_mode == "Filtered Resource Pack only":
         console.print("Source ZIP: Temporary processing file")
@@ -202,22 +204,31 @@ def main():
             continue
             
         selected_categories = None
+        selected_texture_subs = None
         if output_mode == "Filtered Resource Pack only":
             selected_categories = set()
             cat_action = menus.prompt_asset_categories(selected_categories)
             if cat_action == "back":
                 continue
+                
+            if "Textures" in selected_categories:
+                selected_texture_subs = set()
+                tex_action = menus.prompt_texture_subcategories(selected_texture_subs)
+                if tex_action == "back":
+                    continue
             
         location = get_location()
         if not location:
             continue
             
-        print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories)
+        print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories, selected_texture_subs)
         
         def get_confirmation_choices():
             choices = ["Start Download", "Change Versions", "Change Output Mode"]
             if output_mode == "Filtered Resource Pack only":
                 choices.append("Change Categories")
+                if "Textures" in selected_categories:
+                    choices.append("Change Texture Subs")
             choices.extend(["Change Location", "Cancel"])
             return choices
 
@@ -231,11 +242,13 @@ def main():
             continue
         elif confirm == "Change Categories":
             continue
+        elif confirm == "Change Texture Subs":
+            continue
         elif confirm == "Change Location":
             location = get_location()
             if not location: continue
             
-            print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories)
+            print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories, selected_texture_subs)
             confirm2 = menus.prompt_final_confirmation(get_confirmation_choices())
             if confirm2 != "Start Download":
                 continue
@@ -304,6 +317,7 @@ def main():
                                 filteredPack=f"filtered/{version}", 
                                 outputMode="filtered_only",
                                 filteredCategories=list(selected_categories),
+                                filteredTextureSubs=list(selected_texture_subs) if selected_texture_subs else None,
                                 temporaryArchiveRemoved=True,
                                 packMetadataGenerated=True
                             )
@@ -331,7 +345,7 @@ def main():
                     
                     if is_filtered:
                         console.print(f"[cyan]Filtering and generating resource pack...[/cyan]")
-                        extract_filtered_pack(downloaded_path, filtered_dir, selected_categories)
+                        extract_filtered_pack(downloaded_path, filtered_dir, selected_categories, selected_texture_subs)
                         downloaded_path.unlink()
                         
                         dt_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -343,6 +357,7 @@ def main():
                             outputMode="filtered_only",
                             filteredPack=f"filtered/{version}",
                             filteredCategories=list(selected_categories),
+                            filteredTextureSubs=list(selected_texture_subs) if selected_texture_subs else None,
                             temporaryArchiveRemoved=True,
                             packMetadataGenerated=True
                         )

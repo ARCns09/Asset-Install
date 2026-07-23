@@ -151,6 +151,43 @@ def prompt_asset_categories(selected_categories: set) -> str:
             else:
                 selected_categories.add(action)
 
+def prompt_texture_subcategories(selected_subs: set) -> str:
+    """Prompts the user to toggle texture sub-categories using a looping select menu."""
+    from .extractor import TEXTURE_SUB_MAP
+    categories = list(TEXTURE_SUB_MAP.keys()) + ["Other Textures"]
+    
+    while True:
+        choices = [
+            {"name": "Continue", "value": "__CONTINUE__"},
+            {"name": "Select All", "value": "__SELECT_ALL__"},
+            {"name": "Clear All", "value": "__CLEAR_ALL__"},
+            {"name": "Go Back", "value": "__GO_BACK__"},
+            Separator()
+        ]
+        
+        for c in categories:
+            prefix = "[x]" if c in selected_subs else "[ ]"
+            choices.append({"name": f"{prefix} {c}", "value": c})
+            
+        action = inquirer.select(
+            message="Choose Texture Assets (Enter to toggle/select)",
+            choices=choices
+        ).execute()
+        
+        if action == "__CONTINUE__":
+            return "continue"
+        elif action == "__GO_BACK__":
+            return "back"
+        elif action == "__SELECT_ALL__":
+            selected_subs.update(categories)
+        elif action == "__CLEAR_ALL__":
+            selected_subs.clear()
+        else:
+            if action in selected_subs:
+                selected_subs.discard(action)
+            else:
+                selected_subs.add(action)
+
 def prompt_existing_file(filename: str) -> str:
     """Prompts when a file already exists."""
     return inquirer.select(

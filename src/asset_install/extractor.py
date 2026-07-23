@@ -15,7 +15,16 @@ CATEGORY_MAP = {
     "Atlases": ["atlases/"]
 }
 
-def extract_filtered_pack(zip_path: Path, dest_dir: Path, selected_categories: Set[str]) -> None:
+TEXTURE_SUB_MAP = {
+    "Blocks": ["textures/block/"],
+    "Items": ["textures/item/"],
+    "Entities": ["textures/entity/"],
+    "GUI": ["textures/gui/"],
+    "Environment": ["textures/environment/"],
+    "Colormaps": ["textures/colormap/"]
+}
+
+def extract_filtered_pack(zip_path: Path, dest_dir: Path, selected_categories: Set[str], selected_texture_subs: Set[str] = None) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     
     with zipfile.ZipFile(zip_path, 'r') as zf:
@@ -62,6 +71,25 @@ def extract_filtered_pack(zip_path: Path, dest_dir: Path, selected_categories: S
                     matched_category = "Other Resource-Pack Assets"
                     
                 if matched_category in selected_categories:
+                    # Apply texture sub-category filtering if applicable
+                    if matched_category == "Textures" and selected_texture_subs is not None:
+                        tex_sub_path = sub_path[len("textures/"):] # e.g. "block/stone.png"
+                        matched_tex_sub = None
+                        
+                        for t_cat, t_paths in TEXTURE_SUB_MAP.items():
+                            for p in t_paths:
+                                if sub_path == p or sub_path.startswith(p):
+                                    matched_tex_sub = t_cat
+                                    break
+                            if matched_tex_sub:
+                                break
+                                
+                        if not matched_tex_sub:
+                            matched_tex_sub = "Other Textures"
+                            
+                        if matched_tex_sub not in selected_texture_subs:
+                            continue # Skip this texture file
+                            
                     _extract_file(zf, name, dest_dir / rel_name)
                     
         # If no pack.mcmeta was found, generate a basic one

@@ -62,6 +62,7 @@ class Manifest:
         outputMode: Optional[str] = None,
         filteredPack: Optional[str] = None,
         filteredCategories: Optional[List[str]] = None,
+        filteredTextureSubs: Optional[List[str]] = None,
         temporaryArchiveRemoved: Optional[bool] = None,
         packMetadataGenerated: Optional[bool] = None
     ):
@@ -81,10 +82,14 @@ class Manifest:
                 entry["archive"] = archive
                 entry["filteredPack"] = None
                 entry["temporaryArchiveRemoved"] = False
+                if "filteredTextureSubs" in entry:
+                    del entry["filteredTextureSubs"]
             elif entry["outputMode"] == "filtered_only":
                 entry["archive"] = None
                 entry["filteredPack"] = filteredPack
                 entry["filteredCategories"] = filteredCategories
+                if filteredTextureSubs is not None:
+                    entry["filteredTextureSubs"] = filteredTextureSubs
                 entry["temporaryArchiveRemoved"] = temporaryArchiveRemoved
                 entry["packMetadataGenerated"] = packMetadataGenerated
         else:

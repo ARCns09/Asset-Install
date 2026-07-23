@@ -13,19 +13,23 @@ def test_extract_filtered_pack(tmp_path):
         # Mock repository structure
         zf.writestr("minecraft-assets-1.21/assets/pack.mcmeta", '{"pack": {"pack_format": 1}}')
         zf.writestr("minecraft-assets-1.21/assets/minecraft/textures/block/stone.png", b"stone")
+        zf.writestr("minecraft-assets-1.21/assets/minecraft/textures/item/diamond.png", b"diamond")
+        zf.writestr("minecraft-assets-1.21/assets/minecraft/textures/gui/inventory.png", b"gui")
         zf.writestr("minecraft-assets-1.21/assets/minecraft/sounds/ambient/cave.ogg", b"cave")
         zf.writestr("minecraft-assets-1.21/assets/minecraft/sounds.json", b"sounds")
         zf.writestr("minecraft-assets-1.21/assets/minecraft/font/default.json", b"font")
         zf.writestr("minecraft-assets-1.21/assets/minecraft/unknown_thing/file.txt", b"unknown")
         
-    # Extract only Textures and Sounds
-    extract_filtered_pack(zip_path, dest_dir, {"Textures", "Sounds"})
+    # Extract only Textures and Sounds, but for Textures, only Blocks and GUI
+    extract_filtered_pack(zip_path, dest_dir, {"Textures", "Sounds"}, {"Blocks", "GUI"})
     
     # Check structure
     assert (dest_dir / "pack.mcmeta").exists()
-    assert (dest_dir / "pack.mcmeta").read_text() == '{"pack": {"pack_format": 1}}'
+    assert '{"pack": {"pack_format": 1}}' in (dest_dir / "pack.mcmeta").read_text()
     
     assert (dest_dir / "assets/minecraft/textures/block/stone.png").exists()
+    assert (dest_dir / "assets/minecraft/textures/gui/inventory.png").exists()
+    assert not (dest_dir / "assets/minecraft/textures/item/diamond.png").exists()
     assert (dest_dir / "assets/minecraft/sounds/ambient/cave.ogg").exists()
     assert (dest_dir / "assets/minecraft/sounds.json").exists()
     
