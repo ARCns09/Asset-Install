@@ -14,6 +14,7 @@ from .downloader import download_version, get_zip_url
 from .manifest import Manifest
 from .validator import is_valid_zip, calculate_sha256
 from .history import add_history_entry, get_history, clear_history
+from .extractor import extract_filtered_pack
 
 console = Console()
 
@@ -23,16 +24,20 @@ def print_header():
         width=40
     ))
 
-def print_summary(mode: str, versions: list[str], location: str):
-    console.print("\n[bold]Ready to download[/bold]")
+def print_summary(mode: str, versions: list[str], location: str, output_mode: str, categories: set = None):
+    console.print("\n[bold]Ready to Download[/bold]")
     console.print(f"Mode: {mode}")
     if len(versions) <= 5:
         console.print(f"Versions: {', '.join(versions)}")
     else:
         console.print(f"Versions: {', '.join(versions[:5])} ... and {len(versions) - 5} more")
-    console.print(f"Total: {len(versions)} versions")
+    console.print(f"Output: {output_mode}")
+    if categories is not None:
+        console.print(f"Categories: {', '.join(sorted(categories))}")
     console.print(f"Location: {location}")
-    console.print("Download order: One at a time\n")
+    if output_mode == "Filtered Resource Pack only":
+        console.print("Source ZIP: Temporary processing file")
+    console.print("Download Order: One at a time\n")
 
 def handle_single_download(groups: dict[str, list[str]]) -> list[str]:
     families = list(groups.keys())
@@ -192,25 +197,46 @@ def main():
         if not selected_versions:
             continue
             
+        output_mode = menus.prompt_output_mode()
+        if output_mode == "Go Back":
+            continue
+            
+        selected_categories = None
+        if output_mode == "Filtered Resource Pack only":
+            selected_categories = set()
+            cat_action = menus.prompt_asset_categories(selected_categories)
+            if cat_action == "back":
+                continue
+            
         location = get_location()
         if not location:
             continue
             
-        print_summary(mode_str, selected_versions, str(location))
+        print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories)
         
-        confirm = menus.prompt_final_confirmation()
+        def get_confirmation_choices():
+            choices = ["Start Download", "Change Versions", "Change Output Mode"]
+            if output_mode == "Filtered Resource Pack only":
+                choices.append("Change Categories")
+            choices.extend(["Change Location", "Cancel"])
+            return choices
+
+        confirm = menus.prompt_final_confirmation(get_confirmation_choices())
         
         if confirm == "Cancel":
             continue
-        elif confirm == "Change versions":
+        elif confirm == "Change Versions":
             continue
-        elif confirm == "Change location":
+        elif confirm == "Change Output Mode":
+            continue
+        elif confirm == "Change Categories":
+            continue
+        elif confirm == "Change Location":
             location = get_location()
-            if not location:
-                continue
+            if not location: continue
             
-            print_summary(mode_str, selected_versions, str(location))
-            confirm2 = menus.prompt_final_confirmation()
+            print_summary(mode_str, selected_versions, str(location), output_mode, selected_categories)
+            confirm2 = menus.prompt_final_confirmation(get_confirmation_choices())
             if confirm2 != "Start Download":
                 continue
                 
@@ -233,26 +259,53 @@ def main():
                 retry = False
                 console.print(f"\n[bold]Processing {i} of {total}: Minecraft {version}[/bold]")
                 
+                is_filtered = output_mode == "Filtered Resource Pack only"
                 final_path = location / f"{version}.zip"
+                filtered_dir = location / "filtered" / version
                 
-                if final_path.exists():
-                    exist_action = menus.prompt_existing_file(f"{version}.zip")
+                if is_filtered:
+                    temp_dir = location / ".temporary"
+                    ensure_directory(temp_dir)
+                    download_target = temp_dir
+                    target_check = filtered_dir
+                else:
+                    download_target = location
+                    target_check = final_path
+                
+                if target_check.exists() and (not is_filtered or any(target_check.iterdir())):
+                    exist_action = menus.prompt_existing_file(f"{version} output")
                     if exist_action == "Cancel remaining downloads":
                         cancel_all = True
                         break
                     elif exist_action == "Skip this version":
-                        manifest.update_version(version, "skipped")
+                        if is_filtered:
+                            manifest.update_version(version, "skipped", outputMode="filtered_only", filteredPack=f"filtered/{version}")
+                        else:
+                            manifest.update_version(version, "skipped", outputMode="original", archive=f"{version}.zip")
                         skipped += 1
                         continue
                     elif exist_action == "Verify and use existing file":
-                        if is_valid_zip(final_path):
+                        if not is_filtered and is_valid_zip(final_path):
                             console.print("[green]Existing file is valid.[/green]")
                             sha256 = calculate_sha256(final_path)
                             manifest.update_version(
                                 version, "complete", 
                                 archive=f"{version}.zip", 
                                 size=final_path.stat().st_size, 
-                                sha256=sha256
+                                sha256=sha256,
+                                outputMode="original"
+                            )
+                            skipped += 1
+                            continue
+                        elif is_filtered:
+                            console.print("[green]Using existing generated pack.[/green]")
+                            manifest.update_version(
+                                version, "complete", 
+                                filteredPack=f"filtered/{version}", 
+                                outputMode="filtered_only",
+                                filteredCategories=list(selected_categories),
+                                temporaryArchiveRemoved=True,
+                                packMetadataGenerated=True
                             )
                             skipped += 1
                             continue
@@ -269,31 +322,48 @@ def main():
                         TransferSpeedColumn(),
                         TimeRemainingColumn()
                     ) as progress:
-                        downloaded_path = download_version(version, location, progress)
+                        downloaded_path = download_version(version, download_target, progress)
                     
                     if not is_valid_zip(downloaded_path):
                         raise Exception("Downloaded file is not a valid ZIP archive")
                         
                     sha256 = calculate_sha256(downloaded_path)
                     
-                    # Local time for history
-                    dt_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # UTC for manifest
-                    dt_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    
-                    manifest.update_version(
-                        version, "complete", 
-                        archive=f"{version}.zip", 
-                        size=downloaded_path.stat().st_size, 
-                        sha256=sha256,
-                        downloaded_at=dt_utc
-                    )
-                    
-                    # Record history
-                    add_history_entry(version, dt_local, str(location))
+                    if is_filtered:
+                        console.print(f"[cyan]Filtering and generating resource pack...[/cyan]")
+                        extract_filtered_pack(downloaded_path, filtered_dir, selected_categories)
+                        downloaded_path.unlink()
+                        
+                        dt_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        manifest.update_version(
+                            version, "complete", 
+                            size=filtered_dir.stat().st_size if filtered_dir.exists() else 0, 
+                            sha256=sha256,
+                            downloaded_at=dt_utc,
+                            outputMode="filtered_only",
+                            filteredPack=f"filtered/{version}",
+                            filteredCategories=list(selected_categories),
+                            temporaryArchiveRemoved=True,
+                            packMetadataGenerated=True
+                        )
+                        dt_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        add_history_entry(version, dt_local, str(filtered_dir))
+                    else:
+                        dt_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                        manifest.update_version(
+                            version, "complete", 
+                            archive=f"{version}.zip", 
+                            size=downloaded_path.stat().st_size, 
+                            sha256=sha256,
+                            downloaded_at=dt_utc,
+                            outputMode="original",
+                            temporaryArchiveRemoved=False
+                        )
+                        dt_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        add_history_entry(version, dt_local, str(location))
                     
                     downloaded += 1
-                    console.print(f"[green]Successfully downloaded {version}[/green]")
+                    console.print(f"[green]Successfully processed {version}[/green]")
                     
                 except Exception as e:
                     manifest.update_version(version, "failed", error=str(e))

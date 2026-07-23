@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, List
 
 MANIFEST_FILENAME = "manifest.json"
 
@@ -50,38 +50,65 @@ class Manifest:
             raise
 
     def update_version(
-        self,
-        version: str,
-        status: str,
-        source: str = None,
-        archive: str = None,
-        size: int = None,
-        sha256: str = None,
-        downloaded_at: str = None,
-        error: str = None
+        self, 
+        version: str, 
+        status: str, 
+        archive: Optional[str] = None, 
+        size: Optional[int] = None, 
+        sha256: Optional[str] = None, 
+        downloaded_at: Optional[str] = None, 
+        source: Optional[str] = None, 
+        error: Optional[str] = None,
+        outputMode: Optional[str] = None,
+        filteredPack: Optional[str] = None,
+        filteredCategories: Optional[List[str]] = None,
+        temporaryArchiveRemoved: Optional[bool] = None,
+        packMetadataGenerated: Optional[bool] = None
     ):
-        """Updates the status and details of a specific version."""
+        """Updates the status and metadata of a downloaded version."""
         if version not in self.data["versions"]:
             self.data["versions"][version] = {}
-        
-        v_data = self.data["versions"][version]
-        
-        v_data["status"] = status
-        
-        if source is not None:
-            v_data["source"] = source
-        if archive is not None:
-            v_data["archive"] = archive
-        if size is not None:
-            v_data["size"] = size
-        if sha256 is not None:
-            v_data["sha256"] = sha256
-        if downloaded_at is not None:
-            v_data["downloadedAt"] = downloaded_at
-        
-        # Always set error, can be null
-        v_data["error"] = error
 
+        entry = self.data["versions"][version]
+        entry["status"] = status
+        
+        if outputMode is not None:
+            entry["outputMode"] = outputMode
+        
+        # Original mode keys vs Filtered mode keys
+        if "outputMode" in entry:
+            if entry["outputMode"] == "original":
+                entry["archive"] = archive
+                entry["filteredPack"] = None
+                entry["temporaryArchiveRemoved"] = False
+            elif entry["outputMode"] == "filtered_only":
+                entry["archive"] = None
+                entry["filteredPack"] = filteredPack
+                entry["filteredCategories"] = filteredCategories
+                entry["temporaryArchiveRemoved"] = temporaryArchiveRemoved
+                entry["packMetadataGenerated"] = packMetadataGenerated
+        else:
+            if archive is not None:
+                entry["archive"] = archive
+                
+        if size is not None:
+            entry["size"] = size
+        if sha256 is not None:
+            entry["sha256"] = sha256
+        if downloaded_at is not None:
+            entry["downloaded_at"] = downloaded_at
+        if source is not None:
+            entry["source"] = source
+            
+        if error is not None:
+            entry["error"] = error
+        elif "error" in entry and status == "complete":
+            # Clear error on success
+            del entry["error"]
+            
+        if "warnings" not in entry and entry.get("outputMode") == "filtered_only":
+            entry["warnings"] = []
+            
         self.save()
 
     def get_version(self, version: str) -> dict[str, Any]:

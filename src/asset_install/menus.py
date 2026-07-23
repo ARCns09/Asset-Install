@@ -86,18 +86,70 @@ def prompt_download_location() -> str:
         ).execute()
     return action
 
-def prompt_final_confirmation() -> str:
+def prompt_final_confirmation(choices: List[str] = None) -> str:
     """Prompts the final confirmation before download."""
-    return inquirer.select(
-        message="Ready to download",
-        choices=[
+    if choices is None:
+        choices = [
             "Start Download",
             "Change versions",
             "Change location",
             "Cancel"
-        ],
+        ]
+        
+    return inquirer.select(
+        message="Ready to download",
+        choices=choices,
         default="Start Download"
     ).execute()
+
+def prompt_output_mode(default_mode: str = "Original ZIP only") -> str:
+    """Prompts the user to choose an output mode."""
+    return inquirer.select(
+        message="Choose Download Output",
+        choices=[
+            "Original ZIP only",
+            "Filtered Resource Pack only",
+            "Go Back"
+        ],
+        default=default_mode
+    ).execute()
+
+def prompt_asset_categories(selected_categories: set) -> str:
+    """Prompts the user to toggle categories using a looping select menu."""
+    from .extractor import CATEGORY_MAP
+    categories = list(CATEGORY_MAP.keys()) + ["Other Resource-Pack Assets"]
+    
+    while True:
+        choices = [
+            {"name": "Continue", "value": "__CONTINUE__"},
+            {"name": "Select All", "value": "__SELECT_ALL__"},
+            {"name": "Clear All", "value": "__CLEAR_ALL__"},
+            {"name": "Go Back", "value": "__GO_BACK__"},
+            Separator()
+        ]
+        
+        for c in categories:
+            prefix = "[x]" if c in selected_categories else "[ ]"
+            choices.append({"name": f"{prefix} {c}", "value": c})
+            
+        action = inquirer.select(
+            message="Choose Resource-Pack Assets (Enter to toggle/select)",
+            choices=choices
+        ).execute()
+        
+        if action == "__CONTINUE__":
+            return "continue"
+        elif action == "__GO_BACK__":
+            return "back"
+        elif action == "__SELECT_ALL__":
+            selected_categories.update(categories)
+        elif action == "__CLEAR_ALL__":
+            selected_categories.clear()
+        else:
+            if action in selected_categories:
+                selected_categories.discard(action)
+            else:
+                selected_categories.add(action)
 
 def prompt_existing_file(filename: str) -> str:
     """Prompts when a file already exists."""
