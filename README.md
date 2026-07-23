@@ -2,7 +2,7 @@
 
 Download original Minecraft assets from any Java Edition version directly from your terminal.
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/ARCns09/Asset-Install/build.yml?style=flat-square)](https://github.com/ARCns09/Asset-Install/actions)
+[![Build](https://github.com/ARCns09/Asset-Install/actions/workflows/tests.yml/badge.svg)](https://github.com/ARCns09/Asset-Install/actions/workflows/tests.yml)
 [![Latest Release](https://img.shields.io/github/v/release/ARCns09/Asset-Install?style=flat-square)](https://github.com/ARCns09/Asset-Install/releases)
 [![License](https://img.shields.io/github/license/ARCns09/Asset-Install?style=flat-square)](https://github.com/ARCns09/Asset-Install/blob/main/LICENSE)
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)](https://python.org)
