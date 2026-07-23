@@ -62,3 +62,6 @@ local/
 scratch/
 backup/
 backups/
+
+# Private documentation
+PRD.md

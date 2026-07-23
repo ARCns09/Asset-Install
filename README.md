@@ -41,6 +41,29 @@ It provides a beautiful, interactive CLI that instantly downloads the exact, unt
 
 ---
 
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td align="center"><b>Main Menu</b></td>
+    <td align="center"><b>Select Version</b></td>
+  </tr>
+  <tr>
+    <td><img src="Images/main-menu.png" alt="Main Menu"></td>
+    <td><img src="Images/version-selection.png" alt="Select Version"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Download Progress</b></td>
+    <td align="center"><b>Download Complete</b></td>
+  </tr>
+  <tr>
+    <td><img src="Images/download-progress.png" alt="Download Progress"></td>
+    <td><img src="Images/download-complete.png" alt="Download Complete"></td>
+  </tr>
+</table>
+
+---
+
 ## Installation
 
 Asset Install is currently distributed directly from GitHub and can be easily installed using `uv`.
