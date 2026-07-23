@@ -4,7 +4,7 @@ import time
 from pathlib import Path
 from urllib.parse import quote
 
-from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
+from rich.progress import Progress
 
 def get_zip_url(version: str) -> str:
     """Constructs the ZIP URL for a given version."""
@@ -34,21 +34,42 @@ def download_version(version: str, dest_dir: Path, progress: Progress) -> Path:
     retries = 0
     
     while retries <= max_retries:
+        headers = {}
+        initial_size = 0
+        if part_path.exists():
+            initial_size = part_path.stat().st_size
+            if initial_size > 0:
+                headers["Range"] = f"bytes={initial_size}-"
+                
         try:
-            with requests.get(url, stream=True, timeout=15) as response:
+            with requests.get(url, headers=headers, stream=True, timeout=15) as response:
                 if response.status_code == 404:
                     raise NonRetryableError("GitHub returned HTTP 404 (Branch not found)")
                 if response.status_code in (429, 500, 502, 503, 504):
                     raise RetryableError(f"HTTP {response.status_code}")
+                if response.status_code == 416: # Range Not Satisfiable
+                    part_path.unlink()
+                    continue
                 
                 response.raise_for_status()
                 
+                is_resume = response.status_code == 206
+                if not is_resume and initial_size > 0:
+                    # Server ignored Range or it changed. Start over.
+                    initial_size = 0
+                
                 content_length = response.headers.get("content-length")
-                total_size = int(content_length) if content_length is not None else None
+                if content_length is not None:
+                    total_size = initial_size + int(content_length)
+                else:
+                    total_size = None
                 
                 task_id = progress.add_task(f"[cyan]Minecraft {version}", total=total_size)
+                if initial_size > 0:
+                    progress.update(task_id, advance=initial_size)
                 
-                with open(part_path, "wb") as f:
+                mode = "ab" if is_resume else "wb"
+                with open(part_path, mode) as f:
                     for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)

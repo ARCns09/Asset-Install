@@ -1,8 +1,7 @@
 import pytest
 import responses
-from pathlib import Path
 from unittest.mock import Mock
-from asset_install.downloader import get_zip_url, download_version, DownloadError, RetryableError, NonRetryableError
+from asset_install.downloader import get_zip_url, download_version, NonRetryableError
 
 def test_get_zip_url():
     url = get_zip_url("1.21.11")
@@ -54,3 +53,48 @@ def test_download_version_retry(tmp_path):
         assert final_path.read_bytes() == b"success"
     finally:
         time.sleep = original_sleep
+
+@responses.activate
+def test_download_version_resume(tmp_path):
+    version = "resume-version"
+    url = get_zip_url(version)
+    
+    part_path = tmp_path / f"{version}.zip.part"
+    part_path.write_bytes(b"hello")
+    
+    # 206 Partial Content
+    responses.add(
+        responses.GET, 
+        url, 
+        body=b"-world", 
+        status=206, 
+        match=[responses.matchers.header_matcher({"Range": "bytes=5-"})]
+    )
+    
+    progress_mock = Mock()
+    final_path = download_version(version, tmp_path, progress_mock)
+    
+    assert final_path.exists()
+    assert final_path.read_bytes() == b"hello-world"
+
+@responses.activate
+def test_download_version_resume_fallback(tmp_path):
+    version = "resume-fallback"
+    url = get_zip_url(version)
+    
+    part_path = tmp_path / f"{version}.zip.part"
+    part_path.write_bytes(b"hello")
+    
+    # 200 OK (server ignored Range)
+    responses.add(
+        responses.GET, 
+        url, 
+        body=b"full-file", 
+        status=200
+    )
+    
+    progress_mock = Mock()
+    final_path = download_version(version, tmp_path, progress_mock)
+    
+    assert final_path.exists()
+    assert final_path.read_bytes() == b"full-file"

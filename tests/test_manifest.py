@@ -1,4 +1,3 @@
-import json
 from asset_install.manifest import Manifest
 
 def test_manifest_creation_and_update(tmp_path):

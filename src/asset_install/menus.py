@@ -1,11 +1,6 @@
-from pathlib import Path
-from typing import List, Optional
-
+from typing import List
 from InquirerPy import inquirer
-from InquirerPy.validator import PathValidator
-
-from .paths import resolve_path, is_path_writable
-from .versions import get_approved_versions
+from InquirerPy.separator import Separator
 
 def show_main_menu() -> str:
     """Shows the main menu and returns the selected action."""
@@ -14,16 +9,32 @@ def show_main_menu() -> str:
         choices=[
             "Single Download",
             "Multi Download",
+            "Download History",
+            "Refresh Version List",
             "Exit"
         ],
         default="Single Download",
     ).execute()
 
-def prompt_single_version(versions: List[str]) -> str:
-    """Prompts for a single version selection with search."""
-    return inquirer.fuzzy(
-        message="Select a version:",
-        choices=versions,
+def prompt_version_family(families: List[str], multi: bool = False, count: int = 0) -> str:
+    """Prompts for a version family selection."""
+    choices = []
+    if multi:
+        choices.append({"name": f"== Confirm Selection ({count} total) ==", "value": "__CONFIRM__"})
+    choices.extend([{"name": f, "value": f} for f in families])
+    choices.append({"name": "== Cancel ==" if multi else "== Go Back ==", "value": "__CANCEL__"})
+    
+    msg = "Select Minecraft Version Family:"
+    return inquirer.select(message=msg, choices=choices).execute()
+
+def prompt_single_version_in_family(family: str, versions: List[str]) -> str:
+    """Prompts for a single version selection inside a family."""
+    choices = [{"name": v, "value": v} for v in versions]
+    choices.append({"name": "== Go Back ==", "value": "__GO_BACK__"})
+    
+    return inquirer.select(
+        message=f"Minecraft {family}",
+        choices=choices,
     ).execute()
 
 def prompt_single_version_confirm(version: str) -> str:
@@ -38,28 +49,21 @@ def prompt_single_version_confirm(version: str) -> str:
         default="Yes, continue"
     ).execute()
 
-def prompt_multi_version(versions: List[str], selected: List[str] = None) -> List[str]:
-    """Prompts for multi version selection. Includes Select All/Clear All handling."""
+def prompt_multi_version_in_family(family: str, versions: List[str], selected: List[str] = None) -> List[str]:
+    """Prompts for multi version selection within a family."""
     choices = [{"name": v, "value": v, "enabled": v in (selected or [])} for v in versions]
     
-    # We can't natively add a distinct action button inside checkbox using just InquirerPy's checkbox, 
-    # but we can add meta-options at the top.
-    
     meta_choices = [
-        {"name": "== Confirm Selection ==", "value": "__CONFIRM__"},
-        {"name": "== Select All ==", "value": "__SELECT_ALL__"},
-        {"name": "== Clear All ==", "value": "__CLEAR_ALL__"},
-        {"name": "== Cancel ==", "value": "__CANCEL__"},
-        inquirer.separator()
+        {"name": "== Select All (Space to select, then Enter) ==", "value": "__SELECT_ALL__"},
+        {"name": "== Clear All (Space to select, then Enter) ==", "value": "__CLEAR_ALL__"},
+        Separator()
     ]
 
-    result = inquirer.checkbox(
-        message="Select Minecraft versions (Space to toggle, Enter to finish)",
+    return inquirer.checkbox(
+        message=f"Minecraft {family}",
         choices=meta_choices + choices,
-        instruction="(Press <space> to select, <enter> to finish)"
+        instruction="(Use <space> to toggle versions, <enter> to confirm and go back)"
     ).execute()
-
-    return result
 
 def prompt_download_location() -> str:
     """Prompts the user for the download location."""
@@ -118,4 +122,11 @@ def prompt_failure_continue(version: str, reason: str) -> str:
             "Cancel remaining downloads"
         ],
         default="Continue with remaining versions"
+    ).execute()
+
+def prompt_clear_history() -> str:
+    return inquirer.select(
+        message="Clear download history? (This will not delete downloaded files)",
+        choices=["Yes, clear history", "Cancel"],
+        default="Cancel"
     ).execute()

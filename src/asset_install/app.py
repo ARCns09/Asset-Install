@@ -1,19 +1,19 @@
-import sys
 import datetime
 from pathlib import Path
-
+from InquirerPy import inquirer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from rich.table import Table
 from rich.progress import Progress, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn, TimeRemainingColumn
 
 from . import menus
-from InquirerPy import inquirer
-from .versions import get_approved_versions
+from .versions import get_available_versions, group_versions
 from .paths import resolve_path, ensure_directory, is_path_writable
-from .downloader import download_version, DownloadError, get_zip_url
+from .downloader import download_version, get_zip_url
 from .manifest import Manifest
 from .validator import is_valid_zip, calculate_sha256
+from .history import add_history_entry, get_history, clear_history
 
 console = Console()
 
@@ -34,44 +34,62 @@ def print_summary(mode: str, versions: list[str], location: str):
     console.print(f"Location: {location}")
     console.print("Download order: One at a time\n")
 
-def handle_single_download(versions: list[str]) -> list[str]:
+def handle_single_download(groups: dict[str, list[str]]) -> list[str]:
+    families = list(groups.keys())
     while True:
-        selected = menus.prompt_single_version(versions)
-        if not selected:
+        family = menus.prompt_version_family(families)
+        if family == "__CANCEL__":
             return []
-        
-        confirm = menus.prompt_single_version_confirm(selected)
-        if confirm == "Yes, continue":
-            return [selected]
-        elif confirm == "Cancel":
-            return []
-        # if Change version, loop continues
-
-def handle_multi_download(versions: list[str]) -> list[str]:
-    selected_versions = []
-    while True:
-        result = menus.prompt_multi_version(versions, selected_versions)
-        
-        # Handle special actions
-        if "__CANCEL__" in result:
-            return []
-        if "__CLEAR_ALL__" in result:
-            selected_versions = []
-            continue
-        if "__SELECT_ALL__" in result:
-            selected_versions = versions.copy()
-            continue
-        if "__CONFIRM__" in result:
-            # Filter out special actions
-            final_selection = [v for v in result if not v.startswith("__")]
-            if not final_selection:
-                console.print("[red]No versions selected![/red]")
-                selected_versions = []
-                continue
-            return final_selection
             
-        # Update selection and loop back
-        selected_versions = [v for v in result if not v.startswith("__")]
+        versions = groups[family]
+        while True:
+            selected = menus.prompt_single_version_in_family(family, versions)
+            if selected == "__GO_BACK__":
+                break # Go back to family picker
+            
+            confirm = menus.prompt_single_version_confirm(selected)
+            if confirm == "Yes, continue":
+                return [selected]
+            elif confirm == "Cancel":
+                return []
+            # if Change version, loop continues in the version picker
+
+def handle_multi_download(groups: dict[str, list[str]]) -> list[str]:
+    selected_versions = set()
+    families = list(groups.keys())
+    
+    while True:
+        action = menus.prompt_version_family(families, multi=True, count=len(selected_versions))
+        if action == "__CANCEL__":
+            return []
+        if action == "__CONFIRM__":
+            if not selected_versions:
+                console.print("[red]No versions selected![/red]")
+                continue
+            # Sort final output if needed, but they are a set.
+            # We'll just return it, app will sort it later if needed.
+            return list(selected_versions)
+            
+        family = action
+        versions = groups[family]
+        while True:
+            current_selected = [v for v in versions if v in selected_versions]
+            result = menus.prompt_multi_version_in_family(family, versions, current_selected)
+            
+            if "__SELECT_ALL__" in result:
+                selected_versions.update(versions)
+                continue
+            if "__CLEAR_ALL__" in result:
+                for v in versions:
+                    selected_versions.discard(v)
+                continue
+                
+            final_selection = [v for v in result if not v.startswith("__")]
+            for v in versions:
+                selected_versions.discard(v)
+            for v in final_selection:
+                selected_versions.add(v)
+            break
 
 def get_location() -> Path:
     while True:
@@ -82,7 +100,7 @@ def get_location() -> Path:
             path = Path.cwd() / "minecraft-assets"
         elif loc == "Downloads folder":
             path = Path.home() / "Downloads" / "minecraft-assets"
-        else: # Custom path
+        else:
             path = resolve_path(loc)
         
         if not is_path_writable(path):
@@ -91,113 +109,46 @@ def get_location() -> Path:
             
         return path
 
-def process_downloads(versions: list[str], location: Path):
-    ensure_directory(location)
-    manifest = Manifest(location)
-    
-    downloaded = 0
-    skipped = 0
-    failed = 0
-    
-    total = len(versions)
-    
-    for i, version in enumerate(versions, 1):
-        console.print(f"\n[bold]Processing {i} of {total}: Minecraft {version}[/bold]")
+def show_history():
+    while True:
+        console.clear()
+        hist = get_history()
         
-        final_path = location / f"{version}.zip"
-        
-        # Check existing file
-        if final_path.exists():
-            action = menus.prompt_existing_file(f"{version}.zip")
-            if action == "Cancel remaining downloads":
-                break
-            elif action == "Skip this version":
-                manifest.update_version(version, "skipped")
-                skipped += 1
-                continue
-            elif action == "Verify and use existing file":
-                if is_valid_zip(final_path):
-                    console.print("[green]Existing file is valid.[/green]")
-                    sha256 = calculate_sha256(final_path)
-                    size = final_path.stat().st_size
-                    manifest.update_version(
-                        version, "complete", 
-                        archive=f"{version}.zip", 
-                        size=size, 
-                        sha256=sha256
-                    )
-                    skipped += 1
-                    continue
-                else:
-                    console.print("[yellow]Existing file is invalid. Re-downloading.[/yellow]")
-            # If "Replace existing file" or invalid, we just continue to download
-        
-        manifest.update_version(version, "downloading", source=get_zip_url(version))
-        
-        try:
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                DownloadColumn(),
-                TransferSpeedColumn(),
-                TimeRemainingColumn()
-            ) as progress:
-                downloaded_path = download_version(version, location, progress)
+        if not hist:
+            console.print("[yellow]Download history is empty.[/yellow]\n")
+        else:
+            table = Table(title="Download History")
+            table.add_column("Version", style="cyan")
+            table.add_column("Date and Time", style="green")
+            table.add_column("Location", style="magenta")
             
-            if not is_valid_zip(downloaded_path):
-                raise Exception("Downloaded file is not a valid ZIP archive")
+            for item in hist:
+                table.add_row(item["version"], item["datetime"], item["location"])
                 
-            sha256 = calculate_sha256(downloaded_path)
-            size = downloaded_path.stat().st_size
-            dt = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            console.print(table)
+            console.print("\n")
             
-            manifest.update_version(
-                version, "complete", 
-                archive=f"{version}.zip", 
-                size=size, 
-                sha256=sha256,
-                downloaded_at=dt
-            )
-            downloaded += 1
-            console.print(f"[green]Successfully downloaded {version}[/green]")
-            
-        except Exception as e:
-            manifest.update_version(version, "failed", error=str(e))
-            failed += 1
-            
-            action = menus.prompt_failure_continue(version, str(e))
-            if action == "Cancel remaining downloads":
-                break
-            elif action == "Retry this version":
-                # A proper implementation would retry the loop for this version, 
-                # but to keep it simple we'll just fail it and let user re-run
-                # Or we can insert it back at the front of the list
-                # For this PRD, we just ask, and if retry we could use a while loop inside.
-                # Let's fix this logic to support retry.
-                pass # Will implement retry logic inside a loop below in a refactor
-            
-            # Since the structure is already simple, we'll just continue if they choose "Continue"
-            # If they choose Retry, we'll have to adjust. Let's adjust the structure.
+        action = inquirer.select(
+            message="History Menu:",
+            choices=["Go Back", "Clear History"] if hist else ["Go Back"]
+        ).execute()
+        
+        if action == "Go Back":
+            break
+        elif action == "Clear History":
+            confirm = menus.prompt_clear_history()
+            if confirm == "Yes, clear history":
+                clear_history()
+                console.print("[green]History cleared.[/green]")
 
-    # Print summary
-    console.print("\n" + "="*30)
-    console.print(Panel(Text("DOWNLOAD COMPLETE", justify="center", style="bold green"), width=40))
-    console.print(f"Downloaded: {downloaded}")
-    console.print(f"Skipped: {skipped}")
-    console.print(f"Failed: {failed}")
-    console.print(f"\nSaved to:\n{location}\n")
-    
-    # We shouldn't use sys.exit here directly if they want to return to menu, but for simplicity let's just finish.
-    # The PRD says:
-    # > Open folder path
-    # > Return to main menu
-    # > Exit
-    
-    # We will implement that in the main loop.
+def fetch_and_warn(refresh=False):
+    def print_warning(msg):
+        console.print(f"[yellow]{msg}[/yellow]")
+    return get_available_versions(refresh=refresh, print_warning=print_warning)
 
 def main():
     try:
-        versions = get_approved_versions()
+        versions = fetch_and_warn(refresh=False)
     except Exception as e:
         console.print(f"[red]Failed to load versions: {e}[/red]")
         return 1
@@ -211,14 +162,31 @@ def main():
         if action == "Exit":
             break
             
+        if action == "Refresh Version List":
+            console.print("[cyan]Refreshing version list from GitHub...[/cyan]")
+            try:
+                versions = fetch_and_warn(refresh=True)
+                console.print("[green]Version list updated successfully.[/green]")
+            except Exception as e:
+                console.print(f"[red]Refresh failed: {e}[/red]")
+            inquirer.confirm("Press Enter to continue...", default=True).execute()
+            continue
+            
+        if action == "Download History":
+            show_history()
+            continue
+            
+        groups = group_versions(versions)
         selected_versions = []
         mode_str = ""
         
         if action == "Single Download":
-            selected_versions = handle_single_download(versions)
+            selected_versions = handle_single_download(groups)
             mode_str = "Single Download"
         elif action == "Multi Download":
-            selected_versions = handle_multi_download(versions)
+            selected_versions = handle_multi_download(groups)
+            # Re-sort the final selection using the main list's order
+            selected_versions = [v for v in versions if v in selected_versions]
             mode_str = "Multi Download"
             
         if not selected_versions:
@@ -235,18 +203,17 @@ def main():
         if confirm == "Cancel":
             continue
         elif confirm == "Change versions":
-            # Just loop back, they'll have to pick again. For a better UX we could jump to the picker.
             continue
         elif confirm == "Change location":
             location = get_location()
-            if not location: continue
+            if not location:
+                continue
             
             print_summary(mode_str, selected_versions, str(location))
             confirm2 = menus.prompt_final_confirmation()
             if confirm2 != "Start Download":
                 continue
                 
-        # Now we process
         ensure_directory(location)
         manifest = Manifest(location)
         
@@ -276,7 +243,7 @@ def main():
                     elif exist_action == "Skip this version":
                         manifest.update_version(version, "skipped")
                         skipped += 1
-                        continue # next version
+                        continue
                     elif exist_action == "Verify and use existing file":
                         if is_valid_zip(final_path):
                             console.print("[green]Existing file is valid.[/green]")
@@ -288,7 +255,7 @@ def main():
                                 sha256=sha256
                             )
                             skipped += 1
-                            continue # next version
+                            continue
                         else:
                             console.print("[yellow]Existing file is invalid. Re-downloading.[/yellow]")
                 
@@ -308,14 +275,23 @@ def main():
                         raise Exception("Downloaded file is not a valid ZIP archive")
                         
                     sha256 = calculate_sha256(downloaded_path)
-                    dt = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    
+                    # Local time for history
+                    dt_local = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # UTC for manifest
+                    dt_utc = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                    
                     manifest.update_version(
                         version, "complete", 
                         archive=f"{version}.zip", 
                         size=downloaded_path.stat().st_size, 
                         sha256=sha256,
-                        downloaded_at=dt
+                        downloaded_at=dt_utc
                     )
+                    
+                    # Record history
+                    add_history_entry(version, dt_local, str(location))
+                    
                     downloaded += 1
                     console.print(f"[green]Successfully downloaded {version}[/green]")
                     
@@ -351,7 +327,6 @@ def main():
         
         if post_action == "Open folder path":
             console.print(f"\n[cyan]{location}[/cyan]\n")
-            # Wait for user acknowledgment
             inquirer.confirm(message="Press Enter to return to main menu...", default=True).execute()
         elif post_action == "Exit":
             break
