@@ -159,7 +159,7 @@ uv tool uninstall mc-asset
 - [x] Multi-version downloads
 - [x] Resume support
 - [x] Cross-platform CLI
-- [ ] PyPI release
+- [x] PyPI release
 - [ ] Future filtering tools
 
 ---
